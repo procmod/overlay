@@ -2,11 +2,23 @@ use crate::error::{Error, Result};
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use windows::core::{BOOL, PCWSTR};
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
-use windows::Win32::Graphics::Dwm::{DwmExtendFrameIntoClientArea, MARGINS};
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::UpdateWindow;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::*;
+
+#[repr(C)]
+struct MARGINS {
+    cxLeftWidth: i32,
+    cxRightWidth: i32,
+    cyTopHeight: i32,
+    cyBottomHeight: i32,
+}
+
+#[link(name = "dwmapi")]
+unsafe extern "system" {
+    fn DwmExtendFrameIntoClientArea(hwnd: HWND, pmarinset: *const MARGINS) -> i32;
+}
 
 /// How to find the target game window.
 pub enum OverlayTarget {
@@ -73,7 +85,7 @@ impl OverlayWindow {
         .map_err(|_| Error::WindowCreation(std::io::Error::last_os_error()))?;
 
         unsafe {
-            let _ = SetLayeredWindowAttributes(hwnd, None, 255, LWA_ALPHA);
+            let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA);
         }
 
         let margins = MARGINS {
@@ -83,7 +95,7 @@ impl OverlayWindow {
             cyBottomHeight: -1,
         };
         unsafe {
-            let _ = DwmExtendFrameIntoClientArea(hwnd, &margins);
+            DwmExtendFrameIntoClientArea(hwnd, &margins);
             let _ = UpdateWindow(hwnd);
         }
 
