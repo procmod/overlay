@@ -1,26 +1,5 @@
 <p align="center">
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <rect width="256" height="256" rx="16" fill="#111"/>
-  <!-- game window underneath (dark) -->
-  <rect x="32" y="48" width="160" height="120" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
-  <rect x="32" y="48" width="160" height="14" rx="6" fill="#334155"/>
-  <rect x="32" y="56" width="160" height="6" fill="#334155"/>
-  <circle cx="44" cy="55" r="3" fill="#f97316" opacity="0.6"/>
-  <circle cx="54" cy="55" r="3" fill="#38bdf8" opacity="0.6"/>
-  <circle cx="64" cy="55" r="3" fill="#a78bfa" opacity="0.6"/>
-  <!-- overlay layer (transparent, floating above) -->
-  <rect x="64" y="88" width="160" height="120" rx="6" fill="none" stroke="#38bdf8" stroke-width="2" stroke-dasharray="6 3" opacity="0.7"/>
-  <!-- esp box on the overlay -->
-  <rect x="120" y="110" width="40" height="60" rx="2" fill="none" stroke="#f97316" stroke-width="2"/>
-  <!-- health bar -->
-  <rect x="120" y="178" width="40" height="6" rx="2" fill="#334155"/>
-  <rect x="120" y="178" width="28" height="6" rx="2" fill="#4ade80"/>
-  <!-- crosshair -->
-  <line x1="134" y1="132" x2="146" y2="132" stroke="#a78bfa" stroke-width="1.5"/>
-  <line x1="140" y1="126" x2="140" y2="138" stroke="#a78bfa" stroke-width="1.5"/>
-  <!-- label text lines -->
-  <rect x="124" y="102" width="32" height="4" rx="1" fill="#f97316" opacity="0.8"/>
-</svg>
+<img src="logo.svg" width="256" height="256" alt="procmod-overlay">
 </p>
 
 <h1 align="center">procmod-overlay</h1>
