@@ -219,6 +219,7 @@ impl Overlay {
     }
 
     /// Draw a health bar with foreground fill and background.
+    #[allow(clippy::too_many_arguments)]
     pub fn health_bar(&mut self, x: f32, y: f32, w: f32, h: f32, pct: f32, fg: Color, bg: Color) {
         let pct = pct.clamp(0.0, 1.0);
         self.rect_filled(x, y, w, h, bg);

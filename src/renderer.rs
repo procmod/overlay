@@ -437,7 +437,7 @@ fn compile_and_create_ps(
 fn create_input_layout(device: &ID3D11Device, vs_blob: &[u8]) -> Result<ID3D11InputLayout> {
     let descs = [
         D3D11_INPUT_ELEMENT_DESC {
-            SemanticName: PCSTR(b"POSITION\0".as_ptr()),
+            SemanticName: windows::core::s!("POSITION"),
             SemanticIndex: 0,
             Format: DXGI_FORMAT_R32G32_FLOAT,
             InputSlot: 0,
@@ -446,7 +446,7 @@ fn create_input_layout(device: &ID3D11Device, vs_blob: &[u8]) -> Result<ID3D11In
             InstanceDataStepRate: 0,
         },
         D3D11_INPUT_ELEMENT_DESC {
-            SemanticName: PCSTR(b"COLOR\0".as_ptr()),
+            SemanticName: windows::core::s!("COLOR"),
             SemanticIndex: 0,
             Format: DXGI_FORMAT_R32G32B32A32_FLOAT,
             InputSlot: 0,
@@ -455,7 +455,7 @@ fn create_input_layout(device: &ID3D11Device, vs_blob: &[u8]) -> Result<ID3D11In
             InstanceDataStepRate: 0,
         },
         D3D11_INPUT_ELEMENT_DESC {
-            SemanticName: PCSTR(b"TEXCOORD\0".as_ptr()),
+            SemanticName: windows::core::s!("TEXCOORD"),
             SemanticIndex: 0,
             Format: DXGI_FORMAT_R32G32_FLOAT,
             InputSlot: 0,
@@ -563,7 +563,7 @@ fn create_rasterizer_state(device: &ID3D11Device) -> Result<ID3D11RasterizerStat
 
 fn create_vertex_buffer(device: &ID3D11Device, vertices: &[Vertex]) -> Result<ID3D11Buffer> {
     let desc = D3D11_BUFFER_DESC {
-        ByteWidth: (vertices.len() * std::mem::size_of::<Vertex>()) as u32,
+        ByteWidth: std::mem::size_of_val(vertices) as u32,
         Usage: D3D11_USAGE_DEFAULT,
         BindFlags: D3D11_BIND_VERTEX_BUFFER.0 as u32,
         ..Default::default()
@@ -586,7 +586,7 @@ fn create_vertex_buffer(device: &ID3D11Device, vertices: &[Vertex]) -> Result<ID
 
 fn create_index_buffer(device: &ID3D11Device, indices: &[u32]) -> Result<ID3D11Buffer> {
     let desc = D3D11_BUFFER_DESC {
-        ByteWidth: (indices.len() * std::mem::size_of::<u32>()) as u32,
+        ByteWidth: std::mem::size_of_val(indices) as u32,
         Usage: D3D11_USAGE_DEFAULT,
         BindFlags: D3D11_BIND_INDEX_BUFFER.0 as u32,
         ..Default::default()
