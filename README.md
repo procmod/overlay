@@ -12,6 +12,8 @@ Create a transparent, click-through overlay window on top of any game window and
 
 <p align="center">
 <img src="example.png" width="600" alt="procmod-overlay demo showing ESP boxes, health bars, and crosshair">
+<br>
+<sub>Live output from the included demo binary. The dark background is a stand-in for a game window.</sub>
 </p>
 
 ## Install
