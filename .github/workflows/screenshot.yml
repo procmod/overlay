@@ -9,20 +9,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --example demo
       - name: capture
-        shell: pwsh
-        run: |
-          $proc = Start-Process -FilePath "target\debug\examples\demo.exe" -PassThru
-          Start-Sleep -Seconds 3
-
-          Add-Type -AssemblyName System.Windows.Forms
-          Add-Type -AssemblyName System.Drawing
-
-          $bitmap = New-Object System.Drawing.Bitmap(800, 600)
-          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-          $graphics.CopyFromScreen(100, 100, 0, 0, (New-Object System.Drawing.Size(800, 600)))
-          $bitmap.Save("example.png", [System.Drawing.Imaging.ImageFormat]::Png)
-
-          Stop-Process -Id $proc.Id -ErrorAction SilentlyContinue
+        env:
+          PROCMOD_SCREENSHOT: "1"
+        run: cargo run --example demo
       - uses: actions/upload-artifact@v4
         with:
           name: screenshot

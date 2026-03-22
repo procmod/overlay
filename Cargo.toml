@@ -12,6 +12,9 @@ categories = ["game-development", "rendering", "graphics"]
 thiserror = "2"
 fontdue = "0.9"
 
+[dev-dependencies]
+png = "0.17"
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
     "Win32_Foundation",

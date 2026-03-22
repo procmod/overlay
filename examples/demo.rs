@@ -1,6 +1,7 @@
-//! visual demo - creates a fake game window and overlays it with ESP, health bars, and text.
-//! run with: cargo run --example demo
-//! then screenshot the result for the README.
+//! visual demo - creates a dark window and overlays it with ESP boxes, health bars, and text.
+//!
+//! cargo run --example demo              # interactive, renders for 2 seconds
+//! PROCMOD_SCREENSHOT=1 cargo run --example demo  # renders, saves example.png, exits
 
 #[cfg(not(target_os = "windows"))]
 fn main() {
@@ -11,8 +12,11 @@ fn main() {
 fn main() -> procmod_overlay::Result<()> {
     use procmod_overlay::{Color, Overlay, OverlayTarget};
 
+    let screenshot_mode = std::env::var("PROCMOD_SCREENSHOT").is_ok();
+
     let game = game_window::create("Procmod Demo Game", 800, 600);
-    std::thread::sleep(std::time::Duration::from_millis(200));
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    game.set_foreground();
 
     let mut overlay = Overlay::new(OverlayTarget::Title("Procmod Demo Game".into()))?;
 
@@ -22,7 +26,9 @@ fn main() -> procmod_overlay::Result<()> {
     let white = Color::WHITE;
     let dim = Color::rgb(30, 30, 30);
 
-    for _ in 0..120 {
+    let frames = if screenshot_mode { 30 } else { 120 };
+
+    for _ in 0..frames {
         overlay.begin_frame()?;
 
         overlay.esp_box(280.0, 140.0, 60.0, 130.0, red, Some("Enemy [85HP]"));
@@ -43,9 +49,83 @@ fn main() -> procmod_overlay::Result<()> {
         std::thread::sleep(std::time::Duration::from_millis(16));
     }
 
+    if screenshot_mode {
+        let (x, y) = game.position();
+        let (w, h) = game.size();
+        screenshot::capture_and_save("example.png", x, y, w, h);
+        eprintln!("saved example.png ({}x{})", w, h);
+    }
+
     drop(overlay);
     drop(game);
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+mod screenshot {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Gdi::*;
+
+    pub fn capture_and_save(path: &str, x: i32, y: i32, w: i32, h: i32) {
+        let pixels = capture(x, y, w, h);
+
+        let file = std::fs::File::create(path).expect("failed to create screenshot file");
+        let buf = std::io::BufWriter::new(file);
+        let mut encoder = png::Encoder::new(buf, w as u32, h as u32);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().expect("failed to write png header");
+        writer
+            .write_image_data(&pixels)
+            .expect("failed to write png data");
+    }
+
+    fn capture(x: i32, y: i32, w: i32, h: i32) -> Vec<u8> {
+        unsafe {
+            let hdc_screen = GetDC(HWND::default());
+            let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
+            let hbm = CreateCompatibleBitmap(hdc_screen, w, h);
+            let old = SelectObject(hdc_mem, hbm);
+
+            let _ = BitBlt(hdc_mem, 0, 0, w, h, Some(hdc_screen), x, y, SRCCOPY);
+
+            let mut bmi = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: w,
+                    biHeight: -h,
+                    biPlanes: 1,
+                    biBitCount: 32,
+                    biCompression: BI_RGB.0 as i32,
+                    ..std::mem::zeroed()
+                },
+                ..std::mem::zeroed()
+            };
+
+            let mut pixels = vec![0u8; (w * h * 4) as usize];
+            GetDIBits(
+                hdc_mem,
+                hbm,
+                0,
+                h as u32,
+                Some(pixels.as_mut_ptr() as _),
+                &mut bmi,
+                DIB_RGB_COLORS,
+            );
+
+            // BGRA -> RGBA
+            for chunk in pixels.chunks_exact_mut(4) {
+                chunk.swap(0, 2);
+            }
+
+            SelectObject(hdc_mem, old);
+            let _ = DeleteObject(hbm);
+            DeleteDC(hdc_mem);
+            ReleaseDC(HWND::default(), hdc_screen);
+
+            pixels
+        }
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -53,7 +133,7 @@ mod game_window {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use windows::core::PCWSTR;
-    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
     use windows::Win32::Graphics::Gdi::{
         BeginPaint, CreateSolidBrush, EndPaint, FillRect, PAINTSTRUCT,
     };
@@ -62,6 +142,30 @@ mod game_window {
 
     pub struct GameWindow {
         hwnd: HWND,
+    }
+
+    impl GameWindow {
+        pub fn position(&self) -> (i32, i32) {
+            let mut rect = RECT::default();
+            unsafe {
+                let _ = GetWindowRect(self.hwnd, &mut rect);
+            }
+            (rect.left, rect.top)
+        }
+
+        pub fn size(&self) -> (i32, i32) {
+            let mut rect = RECT::default();
+            unsafe {
+                let _ = GetWindowRect(self.hwnd, &mut rect);
+            }
+            (rect.right - rect.left, rect.bottom - rect.top)
+        }
+
+        pub fn set_foreground(&self) {
+            unsafe {
+                let _ = SetForegroundWindow(self.hwnd);
+            }
+        }
     }
 
     impl Drop for GameWindow {
@@ -96,8 +200,8 @@ mod game_window {
                 PCWSTR(class_name.as_ptr()),
                 PCWSTR(title_wide.as_ptr()),
                 WS_POPUP | WS_VISIBLE,
-                100,
-                100,
+                0,
+                0,
                 w,
                 h,
                 None,
@@ -121,8 +225,7 @@ mod game_window {
             WM_PAINT => {
                 let mut ps = PAINTSTRUCT::default();
                 let hdc = BeginPaint(hwnd, &mut ps);
-                let dark =
-                    CreateSolidBrush(windows::Win32::Foundation::COLORREF(0x1E1E1E));
+                let dark = CreateSolidBrush(windows::Win32::Foundation::COLORREF(0x1E1E1E));
                 FillRect(hdc, &ps.rcPaint, dark);
                 let _ = EndPaint(hwnd, &ps);
                 LRESULT(0)
