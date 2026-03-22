@@ -63,7 +63,6 @@ fn main() -> procmod_overlay::Result<()> {
 
 #[cfg(target_os = "windows")]
 mod screenshot {
-    use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Gdi::*;
 
     pub fn capture_and_save(path: &str, x: i32, y: i32, w: i32, h: i32) {
@@ -82,10 +81,10 @@ mod screenshot {
 
     fn capture(x: i32, y: i32, w: i32, h: i32) -> Vec<u8> {
         unsafe {
-            let hdc_screen = GetDC(HWND::default());
+            let hdc_screen = GetDC(None);
             let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
             let hbm = CreateCompatibleBitmap(hdc_screen, w, h);
-            let old = SelectObject(hdc_mem, hbm);
+            let old = SelectObject(hdc_mem, hbm.into());
 
             let _ = BitBlt(hdc_mem, 0, 0, w, h, Some(hdc_screen), x, y, SRCCOPY);
 
@@ -96,7 +95,7 @@ mod screenshot {
                     biHeight: -h,
                     biPlanes: 1,
                     biBitCount: 32,
-                    biCompression: BI_RGB.0 as i32,
+                    biCompression: BI_RGB.0 as u32,
                     ..std::mem::zeroed()
                 },
                 ..std::mem::zeroed()
@@ -119,9 +118,9 @@ mod screenshot {
             }
 
             SelectObject(hdc_mem, old);
-            let _ = DeleteObject(hbm);
+            let _ = DeleteObject(hbm.into());
             DeleteDC(hdc_mem);
-            ReleaseDC(HWND::default(), hdc_screen);
+            ReleaseDC(None, hdc_screen);
 
             pixels
         }
