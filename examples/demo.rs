@@ -25,21 +25,17 @@ fn main() -> procmod_overlay::Result<()> {
     for _ in 0..120 {
         overlay.begin_frame()?;
 
-        // enemy ESP boxes
         overlay.esp_box(280.0, 140.0, 60.0, 130.0, red, Some("Enemy [85HP]"));
         overlay.health_bar(280.0, 275.0, 60.0, 6.0, 0.85, red, dim);
 
         overlay.esp_box(520.0, 180.0, 50.0, 110.0, red, Some("Enemy [42HP]"));
         overlay.health_bar(520.0, 295.0, 50.0, 6.0, 0.42, red, dim);
 
-        // friendly
         overlay.esp_box(140.0, 200.0, 55.0, 120.0, green, Some("Ally [100HP]"));
         overlay.health_bar(140.0, 325.0, 55.0, 6.0, 1.0, green, dim);
 
-        // crosshair
         overlay.crosshair(400.0, 300.0, 24.0, 2.0, cyan);
 
-        // HUD text
         overlay.text(16.0, 16.0, "procmod-overlay demo", 20.0, white);
         overlay.text(16.0, 42.0, "FPS: 60", 14.0, Color::rgb(160, 160, 160));
 
@@ -85,7 +81,9 @@ mod game_window {
             lpfnWndProc: Some(wnd_proc),
             hInstance: hinstance.into(),
             lpszClassName: PCWSTR(class_name.as_ptr()),
-            hbrBackground: unsafe { CreateSolidBrush(windows::Win32::Foundation::COLORREF(0x1E1E1E)) },
+            hbrBackground: unsafe {
+                CreateSolidBrush(windows::Win32::Foundation::COLORREF(0x1E1E1E))
+            },
             ..Default::default()
         };
 
@@ -97,9 +95,15 @@ mod game_window {
                 WINDOW_EX_STYLE::default(),
                 PCWSTR(class_name.as_ptr()),
                 PCWSTR(title_wide.as_ptr()),
-                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                100, 100, w, h,
-                None, None, Some(hinstance.into()), None,
+                WS_POPUP | WS_VISIBLE,
+                100,
+                100,
+                w,
+                h,
+                None,
+                None,
+                Some(hinstance.into()),
+                None,
             )
         }
         .expect("failed to create game window");
@@ -117,7 +121,8 @@ mod game_window {
             WM_PAINT => {
                 let mut ps = PAINTSTRUCT::default();
                 let hdc = BeginPaint(hwnd, &mut ps);
-                let dark = CreateSolidBrush(windows::Win32::Foundation::COLORREF(0x1E1E1E));
+                let dark =
+                    CreateSolidBrush(windows::Win32::Foundation::COLORREF(0x1E1E1E));
                 FillRect(hdc, &ps.rcPaint, dark);
                 let _ = EndPaint(hwnd, &ps);
                 LRESULT(0)
