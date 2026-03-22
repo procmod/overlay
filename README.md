@@ -10,6 +10,10 @@
 
 Create a transparent, click-through overlay window on top of any game window and draw shapes, text, and HUD elements. Direct3D 11 backend, immediate-mode API, built-in font rendering.
 
+<p align="center">
+<img src="example.png" width="600" alt="procmod-overlay demo showing ESP boxes, health bars, and crosshair">
+</p>
+
 ## Install
 
 ```toml
@@ -129,6 +133,16 @@ The crate compiles on all platforms but only exports the overlay API on Windows.
 The overlay creates a transparent, always-on-top window (`WS_EX_LAYERED | WS_EX_TRANSPARENT`) positioned over the target game window. All mouse and keyboard input passes through to the game. The overlay tracks the target window's position and resizes automatically.
 
 Rendering uses Direct3D 11 with alpha blending. Shapes are batched into vertex/index buffers and drawn in minimal draw calls. Text is rasterized into a glyph atlas at startup and rendered as textured quads.
+
+## Demo
+
+Run the visual demo on Windows to see the overlay in action:
+
+```
+cargo run --example demo
+```
+
+This creates a dark window simulating a game scene, overlays it with ESP boxes, health bars, a crosshair, and text labels. The screenshot above was captured from this demo.
 
 ## License
 
