@@ -8,7 +8,7 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 #[repr(C)]
-#[allow(non_camel_case_types, non_snake_case)]
+#[allow(non_camel_case_types, non_snake_case, clippy::upper_case_acronyms)]
 struct MARGINS {
     cxLeftWidth: i32,
     cxRightWidth: i32,
