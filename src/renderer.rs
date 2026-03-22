@@ -1,9 +1,8 @@
 use crate::error::{Error, Result};
 use crate::font::GlyphAtlas;
 use crate::vertex::{DrawCommand, Vertex};
-use std::ptr;
 use windows::core::PCSTR;
-use windows::Win32::Foundation::HWND;
+use windows::Win32::Foundation::{HMODULE, HWND};
 use windows::Win32::Graphics::Direct3D::Fxc::{D3DCompile, D3DCOMPILE_OPTIMIZATION_LEVEL3};
 use windows::Win32::Graphics::Direct3D::*;
 use windows::Win32::Graphics::Direct3D11::*;
@@ -169,7 +168,13 @@ impl Renderer {
         self.render_target = None;
         unsafe {
             self.swap_chain
-                .ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0)
+                .ResizeBuffers(
+                    0,
+                    width,
+                    height,
+                    DXGI_FORMAT_UNKNOWN,
+                    DXGI_SWAP_CHAIN_FLAG(0),
+                )
                 .map_err(|_| Error::Renderer {
                     message: "resize failed".into(),
                 })?;
@@ -276,7 +281,7 @@ impl Renderer {
     pub fn end_frame(&self) -> Result<()> {
         unsafe {
             self.swap_chain
-                .Present(1, 0)
+                .Present(1, DXGI_PRESENT(0))
                 .ok()
                 .map_err(|_| Error::Renderer {
                     message: "present failed".into(),
@@ -339,7 +344,7 @@ fn create_device_and_swap_chain(
         D3D11CreateDeviceAndSwapChain(
             None,
             D3D_DRIVER_TYPE_HARDWARE,
-            None,
+            HMODULE::default(),
             D3D11_CREATE_DEVICE_FLAG(0),
             Some(&feature_levels),
             D3D11_SDK_VERSION,
@@ -372,7 +377,7 @@ fn compile_shader(source: &[u8], entry: &str, target: &str, name: &str) -> Resul
             None,
             PCSTR(entry_cstr.as_ptr() as *const _),
             PCSTR(target_cstr.as_ptr() as *const _),
-            D3DCOMPILE_OPTIMIZATION_LEVEL3.0 as u32,
+            D3DCOMPILE_OPTIMIZATION_LEVEL3,
             0,
             &mut blob,
             Some(&mut error_blob),

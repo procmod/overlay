@@ -1,12 +1,11 @@
 use crate::error::{Error, Result};
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
-use std::ptr;
-use windows::Win32::Foundation::{BOOL, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::core::{BOOL, PCWSTR};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Dwm::{DwmExtendFrameIntoClientArea, MARGINS};
 use windows::Win32::Graphics::Gdi::UpdateWindow;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::System::Threading::GetCurrentProcessId;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 /// How to find the target game window.
@@ -37,7 +36,7 @@ impl OverlayWindow {
             cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(wnd_proc),
             hInstance: hinstance.into(),
-            lpszClassName: class_name.as_ptr(),
+            lpszClassName: PCWSTR(class_name.as_ptr()),
             ..Default::default()
         };
 
@@ -47,18 +46,19 @@ impl OverlayWindow {
         }
 
         let mut target_rect = RECT::default();
-        unsafe { GetWindowRect(target_hwnd, &mut target_rect).ok() }
+        unsafe { GetWindowRect(target_hwnd, &mut target_rect) }
             .map_err(|_| Error::WindowNotFound)?;
 
         let w = target_rect.right - target_rect.left;
         let h = target_rect.bottom - target_rect.top;
 
         let ex_style = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE;
+        let title = wide_string("procmod-overlay");
         let hwnd = unsafe {
             CreateWindowExW(
                 ex_style,
-                class_name.as_ptr(),
-                wide_string("procmod-overlay").as_ptr(),
+                PCWSTR(class_name.as_ptr()),
+                PCWSTR(title.as_ptr()),
                 WS_POPUP | WS_VISIBLE,
                 target_rect.left,
                 target_rect.top,
@@ -73,7 +73,7 @@ impl OverlayWindow {
         .map_err(|_| Error::WindowCreation(std::io::Error::last_os_error()))?;
 
         unsafe {
-            SetLayeredWindowAttributes(hwnd, None, 255, LWA_ALPHA).ok();
+            let _ = SetLayeredWindowAttributes(hwnd, None, 255, LWA_ALPHA);
         }
 
         let margins = MARGINS {
@@ -96,7 +96,7 @@ impl OverlayWindow {
 
     /// Update overlay position to match the target window. Returns false if the target is gone.
     pub fn sync_position(&mut self) -> bool {
-        if unsafe { !IsWindow(self.target).as_bool() } {
+        if !unsafe { IsWindow(Some(self.target)) }.as_bool() {
             return false;
         }
 
@@ -150,7 +150,7 @@ impl OverlayWindow {
     }
 
     pub fn is_target_visible(&self) -> bool {
-        if unsafe { !IsWindow(self.target).as_bool() } {
+        if !unsafe { IsWindow(Some(self.target)) }.as_bool() {
             return false;
         }
         let fg = unsafe { GetForegroundWindow() };
@@ -163,7 +163,10 @@ impl Drop for OverlayWindow {
         unsafe {
             let _ = DestroyWindow(self.hwnd);
             let hinstance = GetModuleHandleW(None).unwrap();
-            let _ = UnregisterClassW(self.class_atom as *const u16, Some(hinstance.into()));
+            let _ = UnregisterClassW(
+                PCWSTR(self.class_atom as *const u16),
+                Some(hinstance.into()),
+            );
         }
     }
 }
@@ -173,16 +176,13 @@ fn find_target(target: &OverlayTarget) -> Result<HWND> {
         OverlayTarget::Title(title) => find_window_by_title(title),
         OverlayTarget::Class(class) => {
             let class_wide = wide_string(class);
-            let hwnd = unsafe { FindWindowW(Some(class_wide.as_ptr()), None) };
-            if hwnd == HWND::default() {
-                Err(Error::WindowNotFound)
-            } else {
-                Ok(hwnd)
-            }
+            let hwnd = unsafe { FindWindowW(PCWSTR(class_wide.as_ptr()), PCWSTR::null()) }
+                .map_err(|_| Error::WindowNotFound)?;
+            Ok(hwnd)
         }
         OverlayTarget::Hwnd(raw) => {
             let hwnd = HWND(*raw as *mut _);
-            if unsafe { !IsWindow(hwnd).as_bool() } {
+            if !unsafe { IsWindow(Some(hwnd)) }.as_bool() {
                 return Err(Error::WindowNotFound);
             }
             Ok(hwnd)
