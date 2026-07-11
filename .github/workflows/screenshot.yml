@@ -5,7 +5,7 @@ jobs:
   capture:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --example demo
       - name: capture
