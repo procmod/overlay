@@ -215,33 +215,4 @@ impl Overlay {
         let (w, h) = self.font_atlas.measure(text);
         (w * scale, h * scale)
     }
-
-    /// Draw a crosshair.
-    pub fn crosshair(&mut self, x: f32, y: f32, size: f32, thickness: f32, color: Color) {
-        let half = size * 0.5;
-        self.line(x - half, y, x + half, y, thickness, color);
-        self.line(x, y - half, x, y + half, thickness, color);
-    }
-
-    /// Draw a health bar with foreground fill and background.
-    #[allow(clippy::too_many_arguments)]
-    pub fn health_bar(&mut self, x: f32, y: f32, w: f32, h: f32, pct: f32, fg: Color, bg: Color) {
-        let pct = pct.clamp(0.0, 1.0);
-        self.rect_filled(x, y, w, h, bg);
-        if pct > 0.0 {
-            self.rect_filled(x, y, w * pct, h, fg);
-        }
-        self.rect(x, y, w, h, Color::BLACK);
-    }
-
-    /// Draw an ESP-style bounding box with an optional label.
-    pub fn esp_box(&mut self, x: f32, y: f32, w: f32, h: f32, color: Color, label: Option<&str>) {
-        self.rect(x, y, w, h, color);
-        if let Some(text) = label {
-            let (tw, _th) = self.text_bounds(text, DEFAULT_FONT_SIZE);
-            let tx = x + (w - tw) * 0.5;
-            let ty = y - DEFAULT_FONT_SIZE - 2.0;
-            self.text(tx, ty, text, DEFAULT_FONT_SIZE, color);
-        }
-    }
 }

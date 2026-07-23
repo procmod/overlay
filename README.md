@@ -20,12 +20,12 @@ Create a transparent, click-through overlay window on top of any game window and
 
 ```toml
 [dependencies]
-procmod-overlay = "2"
+procmod-overlay = "2.0.1"
 ```
 
 ## Quick start
 
-Draw an ESP box and health bar over a game window:
+Draw status information and projected debug geometry over a game window:
 
 ```rust
 use procmod_overlay::{Overlay, OverlayTarget, Color};
@@ -36,14 +36,9 @@ fn main() -> procmod_overlay::Result<()> {
     loop {
         overlay.begin_frame()?;
 
-        // ESP bounding box with label
-        overlay.esp_box(100.0, 50.0, 60.0, 120.0, Color::RED, Some("Enemy"));
-
-        // health bar
-        overlay.health_bar(100.0, 175.0, 60.0, 8.0, 0.75, Color::GREEN, Color::rgb(40, 40, 40));
-
-        // crosshair at screen center
-        overlay.crosshair(640.0, 360.0, 20.0, 2.0, Color::WHITE);
+        overlay.rect(100.0, 50.0, 60.0, 120.0, Color::RED);
+        overlay.rect_filled(100.0, 175.0, 45.0, 8.0, Color::GREEN);
+        overlay.text(20.0, 20.0, "instrumentation active", 16.0, Color::WHITE);
 
         overlay.end_frame()?;
     }
@@ -110,22 +105,6 @@ overlay.text(20.0, 40.0, "Distance: 42m", 12.0, Color::YELLOW);
 // measure text bounds before drawing
 let (w, h) = overlay.text_bounds("centered text", 16.0);
 overlay.text(320.0 - w / 2.0, 10.0, "centered text", 16.0, Color::WHITE);
-```
-
-### Convenience methods
-
-Built-in methods for common game overlay patterns:
-
-```rust
-// crosshair
-overlay.crosshair(640.0, 360.0, 24.0, 2.0, Color::GREEN);
-
-// health bar with foreground, background, and border
-overlay.health_bar(100.0, 200.0, 80.0, 10.0, 0.65, Color::GREEN, Color::rgb(30, 30, 30));
-
-// ESP box with optional label
-overlay.esp_box(200.0, 100.0, 50.0, 100.0, Color::RED, Some("Enemy [85HP]"));
-overlay.esp_box(400.0, 150.0, 40.0, 90.0, Color::BLUE, None);
 ```
 
 ## Platform support

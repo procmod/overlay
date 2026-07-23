@@ -31,16 +31,15 @@ fn main() -> procmod_overlay::Result<()> {
     for _ in 0..frames {
         overlay.begin_frame()?;
 
-        overlay.esp_box(280.0, 140.0, 60.0, 130.0, red, Some("Enemy [85HP]"));
-        overlay.health_bar(280.0, 275.0, 60.0, 6.0, 0.85, red, dim);
-
-        overlay.esp_box(520.0, 180.0, 50.0, 110.0, red, Some("Enemy [42HP]"));
-        overlay.health_bar(520.0, 295.0, 50.0, 6.0, 0.42, red, dim);
-
-        overlay.esp_box(140.0, 200.0, 55.0, 120.0, green, Some("Ally [100HP]"));
-        overlay.health_bar(140.0, 325.0, 55.0, 6.0, 1.0, green, dim);
-
-        overlay.crosshair(400.0, 300.0, 24.0, 2.0, cyan);
+        overlay.rect(280.0, 140.0, 60.0, 130.0, red);
+        overlay.rect_filled(280.0, 275.0, 51.0, 6.0, red);
+        overlay.rect(520.0, 180.0, 50.0, 110.0, red);
+        overlay.rect_filled(520.0, 295.0, 21.0, 6.0, red);
+        overlay.rect(140.0, 200.0, 55.0, 120.0, green);
+        overlay.rect_filled(140.0, 325.0, 55.0, 6.0, green);
+        overlay.line(388.0, 300.0, 412.0, 300.0, 2.0, cyan);
+        overlay.line(400.0, 288.0, 400.0, 312.0, 2.0, cyan);
+        overlay.rect(12.0, 68.0, 180.0, 8.0, dim);
 
         overlay.text(16.0, 16.0, "procmod-overlay demo", 20.0, white);
         overlay.text(16.0, 42.0, "FPS: 60", 14.0, Color::rgb(160, 160, 160));
