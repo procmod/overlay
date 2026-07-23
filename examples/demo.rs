@@ -53,7 +53,7 @@ fn main() -> procmod_overlay::Result<()> {
         let (x, y) = game.position();
         let (w, h) = game.size();
         screenshot::capture_and_save("example.png", x, y, w, h);
-        eprintln!("saved example.png ({}x{})", w, h);
+        eprintln!("saved example.png ({w}x{h})");
     }
 
     drop(overlay);
@@ -95,7 +95,7 @@ mod screenshot {
                     biHeight: -h,
                     biPlanes: 1,
                     biBitCount: 32,
-                    biCompression: BI_RGB.0 as u32,
+                    biCompression: BI_RGB.0,
                     ..std::mem::zeroed()
                 },
                 ..std::mem::zeroed()
@@ -119,7 +119,7 @@ mod screenshot {
 
             SelectObject(hdc_mem, old);
             let _ = DeleteObject(hbm.into());
-            DeleteDC(hdc_mem);
+            let _ = DeleteDC(hdc_mem);
             ReleaseDC(None, hdc_screen);
 
             pixels

@@ -48,10 +48,10 @@ impl Overlay {
     /// Begin a new frame. Call drawing methods after this, then call `end_frame`.
     pub fn begin_frame(&mut self) -> Result<()> {
         if !self.window.pump_messages() {
-            return Err(Error::WindowClosed);
+            return Err(Error::OverlayClosed);
         }
         if !self.window.sync_position() {
-            return Err(Error::WindowClosed);
+            return Err(Error::TargetWindowLost);
         }
 
         let (w, h) = self.window.size();

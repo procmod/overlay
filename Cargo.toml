@@ -1,6 +1,6 @@
 [package]
 name = "procmod-overlay"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2021"
 description = "Game overlay rendering with transparent click-through windows"
 license = "MIT"

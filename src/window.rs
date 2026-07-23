@@ -5,6 +5,7 @@ use windows::core::{BOOL, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::UpdateWindow;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 #[repr(C)]
@@ -244,6 +245,12 @@ fn find_window_by_title(title: &str) -> Result<HWND> {
 }
 
 fn find_window_by_pid(pid: u32) -> Result<HWND> {
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }
+        .map_err(|_| Error::ProcessNotFound { pid })?;
+    unsafe {
+        let _ = windows::Win32::Foundation::CloseHandle(process);
+    }
+
     struct SearchState {
         pid: u32,
         result: HWND,
@@ -273,7 +280,7 @@ fn find_window_by_pid(pid: u32) -> Result<HWND> {
     }
 
     if state.result == HWND::default() {
-        Err(Error::WindowNotFound)
+        Err(Error::ProcessWindowNotFound { pid })
     } else {
         Ok(state.result)
     }

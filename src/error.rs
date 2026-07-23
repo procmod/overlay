@@ -5,8 +5,17 @@ pub enum Error {
     #[error("target window not found")]
     WindowNotFound,
 
-    #[error("target window closed")]
-    WindowClosed,
+    #[error("target process does not exist: {pid}")]
+    ProcessNotFound { pid: u32 },
+
+    #[error("process {pid} has no visible top-level window on the current desktop")]
+    ProcessWindowNotFound { pid: u32 },
+
+    #[error("overlay window closed")]
+    OverlayClosed,
+
+    #[error("target window was lost")]
+    TargetWindowLost,
 
     #[error("failed to create overlay window")]
     WindowCreation(#[source] std::io::Error),

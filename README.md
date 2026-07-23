@@ -20,7 +20,7 @@ Create a transparent, click-through overlay window on top of any game window and
 
 ```toml
 [dependencies]
-procmod-overlay = "1"
+procmod-overlay = "2"
 ```
 
 ## Quick start
@@ -69,6 +69,14 @@ let overlay = Overlay::new(OverlayTarget::Pid(1234))?;
 // by raw HWND
 let overlay = Overlay::new(OverlayTarget::Hwnd(0x00010A3C))?;
 ```
+
+PID lookup only enumerates windows on the caller's current interactive desktop. The overlay must run in the logged-in desktop session that contains the target window. A process started directly from a noninteractive SSH session cannot discover windows on another desktop or session.
+
+`ProcessNotFound` means the PID does not exist or cannot be queried. `ProcessWindowNotFound` means the process exists but has no visible top-level window on the current desktop. Windows does not expose enough information here to reliably distinguish a process with no window from one whose window belongs to another desktop or session.
+
+### Lifecycle
+
+`begin_frame` reports `OverlayClosed` when the overlay window closes and `TargetWindowLost` when the target HWND is destroyed or becomes inaccessible. Renderer failures remain renderer errors. The consumer owns reconnection policy and any application-state reset after reconnecting.
 
 ### Drawing shapes
 
