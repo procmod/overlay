@@ -78,6 +78,11 @@ impl Overlay {
         Ok(())
     }
 
+    /// Current overlay client size in pixels.
+    pub fn size(&self) -> (u32, u32) {
+        self.window.size()
+    }
+
     /// Draw a rectangle outline.
     pub fn rect(&mut self, x: f32, y: f32, w: f32, h: f32, color: Color) {
         let t = 1.0;

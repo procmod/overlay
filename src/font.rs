@@ -113,23 +113,23 @@ impl GlyphAtlas {
 
     /// Measure the bounding box of a string at this atlas's font size.
     pub fn measure(&self, text: &str) -> (f32, f32) {
-        let mut width: f32 = 0.0;
-        let line_height = self.size;
-        let mut max_height: f32 = line_height;
-        let mut lines = 1.0_f32;
+        let mut line_width: f32 = 0.0;
+        let mut max_width: f32 = 0.0;
+        let mut lines = 1_u32;
 
         for c in text.chars() {
             if c == '\n' {
-                lines += 1.0;
-                max_height = lines * line_height;
-                width = width.max(0.0);
+                max_width = max_width.max(line_width);
+                line_width = 0.0;
+                lines += 1;
                 continue;
             }
             if let Some(g) = self.glyph(c) {
-                width += g.advance;
+                line_width += g.advance;
             }
         }
-        (width, max_height)
+
+        (max_width.max(line_width), lines as f32 * self.size)
     }
 }
 
@@ -186,8 +186,18 @@ mod tests {
     #[test]
     fn measure_multiline() {
         let atlas = GlyphAtlas::new(16.0);
-        let (_w, h) = atlas.measure("A\nB");
+        let (w, h) = atlas.measure("AAAA\nB");
+        let (first_line_width, _) = atlas.measure("AAAA");
+        assert!((w - first_line_width).abs() < f32::EPSILON);
         assert!((h - 32.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn measure_multiline_uses_widest_line() {
+        let atlas = GlyphAtlas::new(16.0);
+        let (w, _) = atlas.measure("A\nBBBB");
+        let (second_line_width, _) = atlas.measure("BBBB");
+        assert!((w - second_line_width).abs() < f32::EPSILON);
     }
 
     #[test]
