@@ -7,6 +7,8 @@ mod color;
 mod error;
 #[allow(dead_code)]
 mod font;
+#[cfg(target_os = "windows")]
+mod input;
 #[allow(dead_code)]
 mod vertex;
 
@@ -20,6 +22,8 @@ mod window;
 pub use color::Color;
 pub use error::{Error, Result};
 
+#[cfg(target_os = "windows")]
+pub use input::{InputEvent, InteractionMode, KeyState, MouseButton};
 #[cfg(target_os = "windows")]
 pub use overlay::Overlay;
 #[cfg(target_os = "windows")]

@@ -1,6 +1,6 @@
 [package]
 name = "procmod-overlay"
-version = "2.0.1"
+version = "2.1.0"
 edition = "2021"
 description = "Game overlay rendering with transparent click-through windows"
 license = "MIT"
@@ -19,6 +19,7 @@ png = "0.17"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Direct3D",
     "Win32_Graphics_Direct3D11",

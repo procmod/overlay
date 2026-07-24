@@ -20,7 +20,7 @@ Create a transparent, click-through overlay window on top of any game window and
 
 ```toml
 [dependencies]
-procmod-overlay = "2.0.1"
+procmod-overlay = "2.1.0"
 ```
 
 ## Quick start
@@ -68,6 +68,34 @@ let overlay = Overlay::new(OverlayTarget::Hwnd(0x00010A3C))?;
 PID lookup only enumerates windows on the caller's current interactive desktop. The overlay must run in the logged-in desktop session that contains the target window. A process started directly from a noninteractive SSH session cannot discover windows on another desktop or session.
 
 `ProcessNotFound` means the PID does not exist or cannot be queried. `ProcessWindowNotFound` means the process exists but has no visible top-level window on the current desktop. Windows does not expose enough information here to reliably distinguish a process with no window from one whose window belongs to another desktop or session.
+
+### Interaction
+
+Overlays are click-through and non-activating by default. Applications can explicitly enter an interactive control mode and consume window input events:
+
+```rust
+use procmod_overlay::{InputEvent, InteractionMode, MouseButton};
+
+overlay.set_interaction_mode(InteractionMode::Interactive)?;
+
+for event in overlay.drain_input_events() {
+    match event {
+        InputEvent::MouseButton {
+            button: MouseButton::Left,
+            pressed: false,
+            x,
+            y,
+        } => println!("clicked at {x}, {y}"),
+        InputEvent::Key {
+            virtual_key: 0x1b,
+            ..
+        } => overlay.set_interaction_mode(InteractionMode::PassThrough)?,
+        _ => {}
+    }
+}
+```
+
+`Interactive` removes click-through and no-activate styles, activates the overlay, displays its cursor, and reports mouse, wheel, keyboard, text, focus, and close events. Returning to `PassThrough` releases mouse capture and restores focus to the target window. Applications own hit testing, widgets, key bindings, and menu state.
 
 ### Lifecycle
 

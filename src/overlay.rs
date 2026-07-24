@@ -1,6 +1,7 @@
 use crate::color::Color;
 use crate::error::{Error, Result};
 use crate::font::GlyphAtlas;
+use crate::input::{InputEvent, InteractionMode};
 use crate::renderer::Renderer;
 use crate::vertex::{DrawList, Vertex};
 use crate::window::{OverlayTarget, OverlayWindow};
@@ -76,6 +77,21 @@ impl Overlay {
         self.renderer.end_frame()?;
         self.in_frame = false;
         Ok(())
+    }
+
+    /// Current input behavior of the overlay window.
+    pub fn interaction_mode(&self) -> InteractionMode {
+        self.window.interaction_mode()
+    }
+
+    /// Switch between click-through gameplay mode and interactive control mode.
+    pub fn set_interaction_mode(&mut self, mode: InteractionMode) -> Result<()> {
+        self.window.set_interaction_mode(mode)
+    }
+
+    /// Drain input and focus events received since the previous call.
+    pub fn drain_input_events(&mut self) -> Vec<InputEvent> {
+        self.window.drain_events()
     }
 
     /// Current overlay client size in pixels.
