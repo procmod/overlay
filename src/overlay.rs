@@ -43,7 +43,17 @@ impl Overlay {
 
     /// Returns true if the target window is the foreground window.
     pub fn is_visible(&self) -> bool {
-        self.window.is_target_visible()
+        self.window.is_target_foreground()
+    }
+
+    /// Returns true if the target window is the foreground window.
+    pub fn is_target_foreground(&self) -> bool {
+        self.window.is_target_foreground()
+    }
+
+    /// Returns true if the overlay window is the foreground window.
+    pub fn is_overlay_foreground(&self) -> bool {
+        self.window.is_overlay_foreground()
     }
 
     /// Begin a new frame. Call drawing methods after this, then call `end_frame`.
@@ -92,6 +102,18 @@ impl Overlay {
     /// Drain input and focus events received since the previous call.
     pub fn drain_input_events(&mut self) -> Vec<InputEvent> {
         self.window.drain_events()
+    }
+
+    /// Return and reset the number of events discarded because the input queue was full.
+    pub fn take_dropped_input_event_count(&mut self) -> usize {
+        self.window.take_dropped_event_count()
+    }
+
+    /// Close the overlay window.
+    ///
+    /// The next call to `begin_frame` returns [`Error::OverlayClosed`].
+    pub fn close(&mut self) {
+        self.window.close();
     }
 
     /// Current overlay client size in pixels.

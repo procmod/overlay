@@ -26,6 +26,9 @@ pub enum KeyState {
 }
 
 /// Input and focus events collected from the overlay window.
+///
+/// Keyboard events expose Windows virtual-key codes. Text events provide decoded Unicode
+/// scalar values, but IME composition is not exposed.
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputEvent {
     MouseMoved {

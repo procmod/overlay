@@ -95,7 +95,11 @@ for event in overlay.drain_input_events() {
 }
 ```
 
-`Interactive` removes click-through and no-activate styles, activates the overlay, displays its cursor, and reports mouse, wheel, keyboard, text, focus, and close events. Returning to `PassThrough` releases mouse capture and restores focus to the target window. Applications own hit testing, widgets, key bindings, and menu state.
+`Interactive` removes click-through and no-activate styles, requests foreground activation, displays the overlay cursor, and reports mouse, wheel, keyboard, text, focus, and close events. Returning to `PassThrough` immediately restores click-through behavior, releases mouse capture, and requests target-window activation. Windows can deny either foreground request; input routing still changes successfully, and the current focus is observable through `Focused` events, `is_target_foreground`, and `is_overlay_foreground`. Applications own hit testing, widgets, key bindings, and menu state.
+
+Input is collected while `begin_frame` pumps the window message queue. Consecutive mouse-move events are coalesced and the queue is bounded. `take_dropped_input_event_count` reports and resets the number of events discarded at capacity. Text events decode UTF-16 characters, but IME composition is not exposed.
+
+`CloseRequested` lets the application save state or ask for confirmation. Call `overlay.close()` to accept the request; the next `begin_frame` returns `OverlayClosed`.
 
 ### Lifecycle
 
