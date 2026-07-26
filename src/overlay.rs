@@ -3,11 +3,11 @@ use crate::error::{Error, Result};
 use crate::font::GlyphAtlas;
 use crate::input::{InputEvent, InteractionMode};
 use crate::renderer::Renderer;
+use crate::text::{self, TextStyle};
 use crate::vertex::{DrawList, Vertex};
 use crate::window::{OverlayTarget, OverlayWindow};
 use std::f32::consts::PI;
 
-const DEFAULT_FONT_SIZE: f32 = 16.0;
 const CIRCLE_SEGMENTS: usize = 32;
 
 /// A transparent, click-through overlay rendered on top of a target window.
@@ -29,7 +29,7 @@ impl Overlay {
         let (w, h) = window.size();
         let mut renderer = Renderer::new(window.hwnd, w, h)?;
 
-        let font_atlas = GlyphAtlas::new(DEFAULT_FONT_SIZE);
+        let font_atlas = GlyphAtlas::new();
         renderer.upload_font_atlas(&font_atlas)?;
 
         Ok(Self {
@@ -202,54 +202,38 @@ impl Overlay {
         self.draw_list.add_solid_triangles(&verts, &indices);
     }
 
-    /// Draw text at the given position.
+    /// Draw left-aligned text at the given position.
     pub fn text(&mut self, x: f32, y: f32, text: &str, size: f32, color: Color) {
-        let scale = size / DEFAULT_FONT_SIZE;
-        let c = color.to_f32_array();
-        let atlas_w = self.font_atlas.width as f32;
-        let atlas_h = self.font_atlas.height as f32;
-        let mut cursor_x = x;
-        let mut cursor_y = y;
+        self.text_styled(x, y, text, &TextStyle::new(size, color));
+    }
 
-        for ch in text.chars() {
-            if ch == '\n' {
-                cursor_x = x;
-                cursor_y += size;
-                continue;
-            }
-            let glyph = match self.font_atlas.glyph(ch) {
-                Some(g) => g,
-                None => continue,
-            };
-            if glyph.width == 0 || glyph.height == 0 {
-                cursor_x += glyph.advance * scale;
-                continue;
-            }
-
-            let gx = cursor_x + glyph.offset_x * scale;
-            let gy = cursor_y + (size - glyph.offset_y * scale - glyph.height as f32 * scale);
-            let gw = glyph.width as f32 * scale;
-            let gh = glyph.height as f32 * scale;
-
-            let u0 = glyph.x as f32 / atlas_w;
-            let v0 = glyph.y as f32 / atlas_h;
-            let u1 = (glyph.x + glyph.width) as f32 / atlas_w;
-            let v1 = (glyph.y + glyph.height) as f32 / atlas_h;
-
-            self.draw_list.add_textured_quad(
-                Vertex::with_uv(gx, gy, c, u0, v0),
-                Vertex::with_uv(gx + gw, gy, c, u1, v0),
-                Vertex::with_uv(gx + gw, gy + gh, c, u1, v1),
-                Vertex::with_uv(gx, gy + gh, c, u0, v1),
-            );
-
-            cursor_x += glyph.advance * scale;
-        }
+    /// Draw text with an outline, alignment, or both.
+    ///
+    /// Outlined text stays legible over unknown backgrounds. The outline is rasterized
+    /// from the glyph's distance field, so it costs one extra draw call per string
+    /// regardless of length.
+    ///
+    /// ```no_run
+    /// # use procmod_overlay::{Color, Overlay, OverlayTarget, TextAlign, TextStyle};
+    /// # fn main() -> procmod_overlay::Result<()> {
+    /// # let mut overlay = Overlay::new(OverlayTarget::Title("game".into()))?;
+    /// let label = TextStyle::new(16.0, Color::WHITE)
+    ///     .outlined(Color::BLACK, 1.5)
+    ///     .aligned(TextAlign::Center);
+    ///
+    /// overlay.text_styled(320.0, 12.0, "Player1 [100HP]", &label);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn text_styled(&mut self, x: f32, y: f32, text: &str, style: &TextStyle) {
+        text::emit(&mut self.draw_list, &self.font_atlas, x, y, text, style);
     }
 
     /// Measure the bounding box of text at the given size.
+    ///
+    /// The result covers the glyphs only. An outline extends past it by its width.
     pub fn text_bounds(&self, text: &str, size: f32) -> (f32, f32) {
-        let scale = size / DEFAULT_FONT_SIZE;
+        let scale = size / crate::font::ATLAS_FONT_SIZE;
         let (w, h) = self.font_atlas.measure(text);
         (w * scale, h * scale)
     }

@@ -10,6 +10,8 @@ mod font;
 #[cfg(target_os = "windows")]
 mod input;
 #[allow(dead_code)]
+mod text;
+#[allow(dead_code)]
 mod vertex;
 
 #[cfg(target_os = "windows")]
@@ -21,6 +23,7 @@ mod window;
 
 pub use color::Color;
 pub use error::{Error, Result};
+pub use text::{TextAlign, TextStyle};
 
 #[cfg(target_os = "windows")]
 pub use input::{InputEvent, InteractionMode, KeyState, MouseButton};

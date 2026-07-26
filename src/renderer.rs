@@ -1,6 +1,6 @@
 use crate::error::{Error, Result};
-use crate::font::GlyphAtlas;
-use crate::vertex::{DrawCommand, Vertex};
+use crate::font::{GlyphAtlas, OUTLINE_PAD};
+use crate::vertex::{CommandKind, DrawCommand, Vertex};
 use windows::core::PCSTR;
 use windows::Win32::Foundation::{HMODULE, HWND};
 use windows::Win32::Graphics::Direct3D::Fxc::{D3DCompile, D3DCOMPILE_OPTIMIZATION_LEVEL3};
@@ -11,14 +11,16 @@ use windows::Win32::Graphics::Dxgi::*;
 
 const VS_SOURCE: &[u8] = b"
 struct VS_INPUT {
-    float2 pos : POSITION;
-    float4 col : COLOR;
-    float2 uv  : TEXCOORD;
+    float2 pos    : POSITION;
+    float4 col    : COLOR;
+    float2 uv     : TEXCOORD0;
+    float2 params : TEXCOORD1;
 };
 struct PS_INPUT {
-    float4 pos : SV_POSITION;
-    float4 col : COLOR;
-    float2 uv  : TEXCOORD;
+    float4 pos    : SV_POSITION;
+    float4 col    : COLOR;
+    float2 uv     : TEXCOORD0;
+    float2 params : TEXCOORD1;
 };
 cbuffer cb : register(b0) {
     float2 screen_size;
@@ -32,34 +34,66 @@ PS_INPUT main(VS_INPUT input) {
     output.pos = float4(ndc, 0.0, 1.0);
     output.col = input.col;
     output.uv = input.uv;
+    output.params = input.params;
     return output;
 }
 \0";
 
 const PS_SOLID_SOURCE: &[u8] = b"
 struct PS_INPUT {
-    float4 pos : SV_POSITION;
-    float4 col : COLOR;
-    float2 uv  : TEXCOORD;
+    float4 pos    : SV_POSITION;
+    float4 col    : COLOR;
+    float2 uv     : TEXCOORD0;
+    float2 params : TEXCOORD1;
 };
 float4 main(PS_INPUT input) : SV_TARGET {
     return input.col;
 }
 \0";
 
-const PS_TEXTURED_SOURCE: &[u8] = b"
+const PS_GLYPH_SOURCE: &[u8] = b"
 Texture2D tex : register(t0);
 SamplerState samp : register(s0);
 struct PS_INPUT {
-    float4 pos : SV_POSITION;
-    float4 col : COLOR;
-    float2 uv  : TEXCOORD;
+    float4 pos    : SV_POSITION;
+    float4 col    : COLOR;
+    float2 uv     : TEXCOORD0;
+    float2 params : TEXCOORD1;
 };
 float4 main(PS_INPUT input) : SV_TARGET {
     float alpha = tex.Sample(samp, input.uv).r;
     return float4(input.col.rgb, input.col.a * alpha);
 }
 \0";
+
+/// Outline shader.
+///
+/// The green channel holds the distance from the texel to the glyph contour, encoded so
+/// that 1.0 is on the contour and 0.0 is `OUTLINE_PAD` texels away. `params` carries the
+/// outline width in pixels and the atlas-to-screen scale, so the edge is antialiased over
+/// one screen pixel at any font size.
+fn ps_glyph_outline_source() -> Vec<u8> {
+    format!(
+        "
+Texture2D tex : register(t0);
+SamplerState samp : register(s0);
+struct PS_INPUT {{
+    float4 pos    : SV_POSITION;
+    float4 col    : COLOR;
+    float2 uv     : TEXCOORD0;
+    float2 params : TEXCOORD1;
+}};
+float4 main(PS_INPUT input) : SV_TARGET {{
+    float nearness = tex.Sample(samp, input.uv).g;
+    float distance = (1.0 - nearness) * {pad:.1} * input.params.y;
+    float alpha = saturate(input.params.x + 0.5 - distance);
+    return float4(input.col.rgb, input.col.a * alpha);
+}}
+\0",
+        pad = OUTLINE_PAD as f32
+    )
+    .into_bytes()
+}
 
 #[repr(C)]
 struct ConstantBuffer {
@@ -74,7 +108,8 @@ pub(crate) struct Renderer {
     render_target: Option<ID3D11RenderTargetView>,
     vertex_shader: ID3D11VertexShader,
     ps_solid: ID3D11PixelShader,
-    ps_textured: ID3D11PixelShader,
+    ps_glyph: ID3D11PixelShader,
+    ps_glyph_outline: ID3D11PixelShader,
     input_layout: ID3D11InputLayout,
     constant_buffer: ID3D11Buffer,
     blend_state: ID3D11BlendState,
@@ -90,7 +125,9 @@ impl Renderer {
         let (device, context, swap_chain) = create_device_and_swap_chain(hwnd, width, height)?;
         let (vs_blob, vertex_shader) = compile_and_create_vs(&device)?;
         let ps_solid = compile_and_create_ps(&device, PS_SOLID_SOURCE, "ps_solid")?;
-        let ps_textured = compile_and_create_ps(&device, PS_TEXTURED_SOURCE, "ps_textured")?;
+        let ps_glyph = compile_and_create_ps(&device, PS_GLYPH_SOURCE, "ps_glyph")?;
+        let ps_glyph_outline =
+            compile_and_create_ps(&device, &ps_glyph_outline_source(), "ps_glyph_outline")?;
         let input_layout = create_input_layout(&device, &vs_blob)?;
         let constant_buffer = create_constant_buffer(&device)?;
         let blend_state = create_blend_state(&device)?;
@@ -104,7 +141,8 @@ impl Renderer {
             render_target: None,
             vertex_shader,
             ps_solid,
-            ps_textured,
+            ps_glyph,
+            ps_glyph_outline,
             input_layout,
             constant_buffer,
             blend_state,
@@ -125,7 +163,7 @@ impl Renderer {
             Height: atlas.height,
             MipLevels: 1,
             ArraySize: 1,
-            Format: DXGI_FORMAT_R8_UNORM,
+            Format: DXGI_FORMAT_R8G8_UNORM,
             SampleDesc: DXGI_SAMPLE_DESC {
                 Count: 1,
                 Quality: 0,
@@ -137,7 +175,7 @@ impl Renderer {
 
         let init_data = D3D11_SUBRESOURCE_DATA {
             pSysMem: atlas.pixels.as_ptr() as *const _,
-            SysMemPitch: atlas.width,
+            SysMemPitch: atlas.width * 2,
             ..Default::default()
         };
 
@@ -251,27 +289,20 @@ impl Renderer {
         }
 
         for cmd in commands {
-            match cmd {
-                DrawCommand::Solid {
-                    index_offset,
-                    index_count,
-                    ..
-                } => unsafe {
-                    self.context.PSSetShader(&self.ps_solid, None);
-                    self.context.DrawIndexed(*index_count, *index_offset, 0);
-                },
-                DrawCommand::Textured {
-                    index_offset,
-                    index_count,
-                    ..
-                } => unsafe {
-                    self.context.PSSetShader(&self.ps_textured, None);
-                    if let Some(ref srv) = self.font_texture {
-                        self.context
-                            .PSSetShaderResources(0, Some(&[Some(srv.clone())]));
+            unsafe {
+                match cmd.kind {
+                    CommandKind::Solid => self.context.PSSetShader(&self.ps_solid, None),
+                    CommandKind::Glyph => {
+                        self.context.PSSetShader(&self.ps_glyph, None);
+                        self.bind_font_texture();
                     }
-                    self.context.DrawIndexed(*index_count, *index_offset, 0);
-                },
+                    CommandKind::GlyphOutline => {
+                        self.context.PSSetShader(&self.ps_glyph_outline, None);
+                        self.bind_font_texture();
+                    }
+                }
+                self.context
+                    .DrawIndexed(cmd.index_count, cmd.index_offset, 0);
             }
         }
 
@@ -286,6 +317,15 @@ impl Renderer {
                 .map_err(|_| Error::Renderer {
                     message: "present failed".into(),
                 })
+        }
+    }
+
+    fn bind_font_texture(&self) {
+        if let Some(ref srv) = self.font_texture {
+            unsafe {
+                self.context
+                    .PSSetShaderResources(0, Some(&[Some(srv.clone())]));
+            }
         }
     }
 
@@ -460,6 +500,15 @@ fn create_input_layout(device: &ID3D11Device, vs_blob: &[u8]) -> Result<ID3D11In
             Format: DXGI_FORMAT_R32G32_FLOAT,
             InputSlot: 0,
             AlignedByteOffset: 24,
+            InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
+            InstanceDataStepRate: 0,
+        },
+        D3D11_INPUT_ELEMENT_DESC {
+            SemanticName: windows::core::s!("TEXCOORD"),
+            SemanticIndex: 1,
+            Format: DXGI_FORMAT_R32G32_FLOAT,
+            InputSlot: 0,
+            AlignedByteOffset: 32,
             InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
             InstanceDataStepRate: 0,
         },

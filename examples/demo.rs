@@ -10,7 +10,7 @@ fn main() {
 
 #[cfg(target_os = "windows")]
 fn main() -> procmod_overlay::Result<()> {
-    use procmod_overlay::{Color, Overlay, OverlayTarget};
+    use procmod_overlay::{Color, Overlay, OverlayTarget, TextAlign, TextStyle};
 
     let screenshot_mode = std::env::var("PROCMOD_SCREENSHOT").is_ok();
 
@@ -26,6 +26,10 @@ fn main() -> procmod_overlay::Result<()> {
     let white = Color::WHITE;
     let dim = Color::rgb(30, 30, 30);
 
+    let label = TextStyle::new(13.0, white)
+        .outlined(Color::rgb(10, 10, 10), 1.5)
+        .aligned(TextAlign::Center);
+
     let frames = if screenshot_mode { 30 } else { 120 };
 
     for _ in 0..frames {
@@ -40,6 +44,10 @@ fn main() -> procmod_overlay::Result<()> {
         overlay.line(388.0, 300.0, 412.0, 300.0, 2.0, cyan);
         overlay.line(400.0, 288.0, 400.0, 312.0, 2.0, cyan);
         overlay.rect(12.0, 68.0, 180.0, 8.0, dim);
+
+        overlay.text_styled(310.0, 122.0, "raider [82]", &label);
+        overlay.text_styled(545.0, 162.0, "raider [41]", &label);
+        overlay.text_styled(167.5, 182.0, "medic [100]", &label);
 
         overlay.text(16.0, 16.0, "procmod-overlay demo", 20.0, white);
         overlay.text(16.0, 42.0, "FPS: 60", 14.0, Color::rgb(160, 160, 160));

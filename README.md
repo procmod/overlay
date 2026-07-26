@@ -20,7 +20,7 @@ Create a transparent, click-through overlay window on top of any game window and
 
 ```toml
 [dependencies]
-procmod-overlay = "2.1.0"
+procmod-overlay = "2.2.0"
 ```
 
 ## Quick start
@@ -139,6 +139,26 @@ let (w, h) = overlay.text_bounds("centered text", 16.0);
 overlay.text(320.0 - w / 2.0, 10.0, "centered text", 16.0, Color::WHITE);
 ```
 
+### Outlined and aligned text
+
+An overlay draws over scenery it does not control, and text with no outline vanishes wherever the background happens to match the text color. `TextStyle` adds an outline and per-line alignment:
+
+```rust
+use procmod_overlay::{TextAlign, TextStyle};
+
+let label = TextStyle::new(16.0, Color::WHITE)
+    .outlined(Color::BLACK, 1.5)
+    .aligned(TextAlign::Center);
+
+for enemy in &enemies {
+    overlay.text_styled(enemy.x, enemy.y - 20.0, &enemy.name, &label);
+}
+```
+
+The outline is read from a distance field baked into the glyph atlas when the overlay starts, so its thickness stays uniform around curves and corners, and drawing a string costs one extra draw call however long the string is. Outline width is clamped to `TextStyle::max_outline_width(size)`, which is 7 pixels at size 16 and grows with the font size.
+
+Each line of a multi-line string is aligned independently. `text` draws left-aligned text with no outline.
+
 ## Platform support
 
 | Platform | Backend | Status |
@@ -153,7 +173,7 @@ The crate compiles on all platforms but only exports the overlay API on Windows.
 
 The overlay creates a transparent, always-on-top window (`WS_EX_LAYERED | WS_EX_TRANSPARENT`) positioned over the target game window. All mouse and keyboard input passes through to the game. The overlay tracks the target window's position and resizes automatically.
 
-Rendering uses Direct3D 11 with alpha blending. Shapes are batched into vertex/index buffers and drawn in minimal draw calls. Text is rasterized into a glyph atlas at startup and rendered as textured quads.
+Rendering uses Direct3D 11 with alpha blending. Geometry accumulates into one vertex and index buffer per frame, and consecutive runs that need the same pipeline state are merged into a single draw call. Text is rasterized into a two-channel glyph atlas at startup, holding coverage for the fill and a distance field for outlines, and rendered as textured quads.
 
 ## Demo
 
