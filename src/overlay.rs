@@ -68,8 +68,13 @@ impl Overlay {
         let (w, h) = self.window.size();
         self.renderer.resize(w, h)?;
 
+        if self.renderer.device_lost() {
+            self.renderer.recover()?;
+            self.renderer.upload_font_atlas(&self.font_atlas)?;
+        }
+
         self.draw_list.clear();
-        self.renderer.begin_frame();
+        self.renderer.begin_frame()?;
         self.in_frame = true;
         Ok(())
     }
@@ -107,6 +112,17 @@ impl Overlay {
     /// Return and reset the number of events discarded because the input queue was full.
     pub fn take_dropped_input_event_count(&mut self) -> usize {
         self.window.take_dropped_event_count()
+    }
+
+    /// Return and reset the number of times the graphics device was lost and rebuilt.
+    ///
+    /// A driver reset, a GPU hang, or an adapter change destroys the device. The overlay
+    /// rebuilds it during the next `begin_frame` and carries on, so drawing code needs no
+    /// changes. The frame in flight when the device went away is lost. This reports how
+    /// often that happened, for applications that log it or reset frame timing.
+    /// [`Error::DeviceLost`] is only returned when the replacement device cannot be built.
+    pub fn take_device_reset_count(&mut self) -> usize {
+        self.renderer.take_resets()
     }
 
     /// Close the overlay window.

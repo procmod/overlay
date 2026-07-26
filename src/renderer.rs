@@ -1,7 +1,7 @@
 use crate::error::{Error, Result};
 use crate::font::{GlyphAtlas, OUTLINE_PAD};
 use crate::vertex::{CommandKind, DrawCommand, Vertex};
-use windows::core::PCSTR;
+use windows::core::{HRESULT, PCSTR};
 use windows::Win32::Foundation::{HMODULE, HWND};
 use windows::Win32::Graphics::Direct3D::Fxc::{D3DCompile, D3DCOMPILE_OPTIMIZATION_LEVEL3};
 use windows::Win32::Graphics::Direct3D::*;
@@ -101,7 +101,116 @@ struct ConstantBuffer {
     _padding: [f32; 2],
 }
 
+/// A driver reset, a GPU hang, or an adapter change destroys every D3D11 resource the
+/// overlay holds. DXGI reports it through the call that failed, not through a callback.
+fn signals_device_loss(code: HRESULT) -> bool {
+    code == DXGI_ERROR_DEVICE_REMOVED || code == DXGI_ERROR_DEVICE_RESET
+}
+
+/// Owns the graphics device and rebuilds it when the driver takes it away.
+///
+/// The device is held in an `Option` so the dead one is released before a replacement is
+/// requested. Building a second device and swap chain for the same window while the first
+/// is still alive is not reliable.
 pub(crate) struct Renderer {
+    gpu: Option<Gpu>,
+    hwnd: HWND,
+    width: u32,
+    height: u32,
+    lost: Option<u32>,
+    resets: usize,
+}
+
+impl Renderer {
+    pub fn new(hwnd: HWND, width: u32, height: u32) -> Result<Self> {
+        Ok(Self {
+            gpu: Some(Gpu::new(hwnd, width, height)?),
+            hwnd,
+            width,
+            height,
+            lost: None,
+            resets: 0,
+        })
+    }
+
+    /// True once a device loss has been observed and before it has been repaired.
+    pub fn device_lost(&self) -> bool {
+        self.lost.is_some()
+    }
+
+    /// Number of successful device rebuilds since the last call.
+    pub fn take_resets(&mut self) -> usize {
+        std::mem::take(&mut self.resets)
+    }
+
+    /// Release the dead device and build a replacement.
+    ///
+    /// The caller re-uploads anything the new device needs, the font atlas above all.
+    pub fn recover(&mut self) -> Result<()> {
+        let reason = self.lost.unwrap_or_default();
+        self.gpu = None;
+        let gpu = Gpu::new(self.hwnd, self.width, self.height)
+            .map_err(|_| Error::DeviceLost { reason })?;
+        self.gpu = Some(gpu);
+        self.lost = None;
+        self.resets += 1;
+        Ok(())
+    }
+
+    pub fn upload_font_atlas(&mut self, atlas: &GlyphAtlas) -> Result<()> {
+        let gpu = self.gpu.as_mut().ok_or(Error::DeviceLost {
+            reason: self.lost.unwrap_or_default(),
+        })?;
+        gpu.upload_font_atlas(atlas)
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
+        self.width = width;
+        self.height = height;
+        if self.lost.is_some() {
+            return Ok(());
+        }
+        self.absorb(|gpu| gpu.resize(width, height))
+    }
+
+    pub fn begin_frame(&mut self) -> Result<()> {
+        self.absorb(|gpu| gpu.begin_frame())
+    }
+
+    pub fn submit(
+        &mut self,
+        vertices: &[Vertex],
+        indices: &[u32],
+        commands: &[DrawCommand],
+    ) -> Result<()> {
+        self.absorb(|gpu| gpu.submit(vertices, indices, commands))
+    }
+
+    pub fn end_frame(&mut self) -> Result<()> {
+        self.absorb(|gpu| gpu.end_frame())
+    }
+
+    /// Run an operation against the device, recording a device loss instead of reporting it.
+    ///
+    /// A lost device is repaired on the next `begin_frame`, so the frame that noticed the
+    /// loss is simply dropped rather than failing the caller's render loop.
+    fn absorb(&mut self, operation: impl FnOnce(&mut Gpu) -> Result<()>) -> Result<()> {
+        let reason = self.lost.unwrap_or_default();
+        let gpu = self.gpu.as_mut().ok_or(Error::DeviceLost { reason })?;
+        match operation(gpu) {
+            Err(Error::DeviceLost { reason }) => {
+                self.lost = Some(reason);
+                Ok(())
+            }
+            other => other,
+        }
+    }
+}
+
+/// Every resource tied to one D3D11 device.
+///
+/// Grouped so a lost device can be released as a unit before a replacement is built.
+struct Gpu {
     device: ID3D11Device,
     context: ID3D11DeviceContext,
     swap_chain: IDXGISwapChain,
@@ -120,8 +229,8 @@ pub(crate) struct Renderer {
     height: u32,
 }
 
-impl Renderer {
-    pub fn new(hwnd: HWND, width: u32, height: u32) -> Result<Self> {
+impl Gpu {
+    fn new(hwnd: HWND, width: u32, height: u32) -> Result<Self> {
         let (device, context, swap_chain) = create_device_and_swap_chain(hwnd, width, height)?;
         let (vs_blob, vertex_shader) = compile_and_create_vs(&device)?;
         let ps_solid = compile_and_create_ps(&device, PS_SOLID_SOURCE, "ps_solid")?;
@@ -134,7 +243,7 @@ impl Renderer {
         let sampler = create_sampler(&device)?;
         let raster_state = create_rasterizer_state(&device)?;
 
-        let mut renderer = Self {
+        let mut gpu = Self {
             device,
             context,
             swap_chain,
@@ -153,11 +262,11 @@ impl Renderer {
             height,
         };
 
-        renderer.create_render_target()?;
-        Ok(renderer)
+        gpu.create_render_target()?;
+        Ok(gpu)
     }
 
-    pub fn upload_font_atlas(&mut self, atlas: &GlyphAtlas) -> Result<()> {
+    fn upload_font_atlas(&mut self, atlas: &GlyphAtlas) -> Result<()> {
         let desc = D3D11_TEXTURE2D_DESC {
             Width: atlas.width,
             Height: atlas.height,
@@ -199,31 +308,37 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
+    fn resize(&mut self, width: u32, height: u32) -> Result<()> {
         if width == self.width && height == self.height {
             return Ok(());
         }
         self.render_target = None;
-        unsafe {
-            self.swap_chain
-                .ResizeBuffers(
-                    0,
-                    width,
-                    height,
-                    DXGI_FORMAT_UNKNOWN,
-                    DXGI_SWAP_CHAIN_FLAG(0),
-                )
-                .map_err(|_| Error::Renderer {
-                    message: "resize failed".into(),
-                })?;
-        }
+        let resized = unsafe {
+            self.swap_chain.ResizeBuffers(
+                0,
+                width,
+                height,
+                DXGI_FORMAT_UNKNOWN,
+                DXGI_SWAP_CHAIN_FLAG(0),
+            )
+        };
         self.width = width;
         self.height = height;
+        if let Err(error) = resized {
+            if signals_device_loss(error.code()) {
+                return Err(Error::DeviceLost {
+                    reason: error.code().0 as u32,
+                });
+            }
+            return Err(Error::Renderer {
+                message: "resize failed".into(),
+            });
+        }
         self.create_render_target()
     }
 
-    pub fn begin_frame(&self) {
-        let rt = self.render_target.as_ref().unwrap();
+    fn begin_frame(&self) -> Result<()> {
+        let rt = self.render_target.as_ref().ok_or(Error::RenderTarget)?;
         let clear_color = [0.0f32, 0.0, 0.0, 0.0];
         unsafe {
             self.context.ClearRenderTargetView(rt, &clear_color);
@@ -264,14 +379,10 @@ impl Renderer {
             self.context
                 .VSSetConstantBuffers(0, Some(&[Some(self.constant_buffer.clone())]));
         }
+        Ok(())
     }
 
-    pub fn submit(
-        &self,
-        vertices: &[Vertex],
-        indices: &[u32],
-        commands: &[DrawCommand],
-    ) -> Result<()> {
+    fn submit(&self, vertices: &[Vertex], indices: &[u32], commands: &[DrawCommand]) -> Result<()> {
         if vertices.is_empty() {
             return Ok(());
         }
@@ -309,15 +420,19 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn end_frame(&self) -> Result<()> {
-        unsafe {
-            self.swap_chain
-                .Present(1, DXGI_PRESENT(0))
-                .ok()
-                .map_err(|_| Error::Renderer {
-                    message: "present failed".into(),
-                })
+    fn end_frame(&self) -> Result<()> {
+        let presented = unsafe { self.swap_chain.Present(1, DXGI_PRESENT(0)) };
+        if presented.is_ok() {
+            return Ok(());
         }
+        if signals_device_loss(presented) {
+            return Err(Error::DeviceLost {
+                reason: presented.0 as u32,
+            });
+        }
+        Err(Error::Renderer {
+            message: "present failed".into(),
+        })
     }
 
     fn bind_font_texture(&self) {
@@ -668,6 +783,14 @@ mod tests {
 
     // D3DCompile needs no device, so this runs anywhere the compiler DLL is present and
     // catches HLSL errors that would otherwise only surface when an overlay is created
+    #[test]
+    fn device_loss_is_told_apart_from_other_failures() {
+        assert!(signals_device_loss(DXGI_ERROR_DEVICE_REMOVED));
+        assert!(signals_device_loss(DXGI_ERROR_DEVICE_RESET));
+        assert!(!signals_device_loss(DXGI_ERROR_INVALID_CALL));
+        assert!(!signals_device_loss(HRESULT(0)));
+    }
+
     #[test]
     fn shaders_compile() {
         compile(VS_SOURCE, "vs_5_0", "vertex");

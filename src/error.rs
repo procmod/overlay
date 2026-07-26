@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum Error {
     #[error("target window not found")]
     WindowNotFound,
@@ -34,6 +35,14 @@ pub enum Error {
 
     #[error("renderer error: {message}")]
     Renderer { message: String },
+
+    /// The graphics device was lost and could not be rebuilt.
+    ///
+    /// A lost device is normally repaired during the next `begin_frame` without the
+    /// application seeing an error. This reports the case where the replacement device
+    /// could not be created, which usually means the adapter is gone for good.
+    #[error("graphics device was lost and could not be rebuilt (0x{reason:08X})")]
+    DeviceLost { reason: u32 },
 
     #[error("frame not in progress")]
     NoActiveFrame,

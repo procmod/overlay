@@ -20,7 +20,7 @@ Create a transparent, click-through overlay window on top of any game window and
 
 ```toml
 [dependencies]
-procmod-overlay = "2.2.0"
+procmod-overlay = "3.0.0"
 ```
 
 ## Quick start
@@ -104,6 +104,18 @@ Input is collected while `begin_frame` pumps the window message queue. Consecuti
 ### Lifecycle
 
 `begin_frame` reports `OverlayClosed` when the overlay window closes and `TargetWindowLost` when the target HWND is destroyed or becomes inaccessible. Renderer failures remain renderer errors. The consumer owns reconnection policy and any application-state reset after reconnecting.
+
+A driver reset, a GPU hang, or an adapter change destroys the graphics device. The overlay releases the dead device, builds a replacement during the next `begin_frame`, and re-uploads the glyph atlas, so drawing code needs no changes and the render loop keeps running. The frame in flight when the device went away is dropped. `take_device_reset_count` reports and resets how many rebuilds happened, for applications that log it or reset frame timing:
+
+```rust
+overlay.begin_frame()?;
+
+if overlay.take_device_reset_count() > 0 {
+    // the previous frame was lost with the device
+}
+```
+
+`Error::DeviceLost` is only returned when the replacement device cannot be built, which usually means the adapter is gone for good.
 
 ### Drawing shapes
 
