@@ -85,8 +85,8 @@ struct PS_INPUT {{
 }};
 float4 main(PS_INPUT input) : SV_TARGET {{
     float nearness = tex.Sample(samp, input.uv).g;
-    float distance = (1.0 - nearness) * {pad:.1} * input.params.y;
-    float alpha = saturate(input.params.x + 0.5 - distance);
+    float to_contour = (1.0 - nearness) * {pad:.1} * input.params.y;
+    float alpha = saturate(input.params.x + 0.5 - to_contour);
     return float4(input.col.rgb, input.col.a * alpha);
 }}
 \0",
@@ -481,7 +481,7 @@ fn create_input_layout(device: &ID3D11Device, vs_blob: &[u8]) -> Result<ID3D11In
             SemanticIndex: 0,
             Format: DXGI_FORMAT_R32G32_FLOAT,
             InputSlot: 0,
-            AlignedByteOffset: 0,
+            AlignedByteOffset: std::mem::offset_of!(Vertex, position) as u32,
             InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
             InstanceDataStepRate: 0,
         },
@@ -490,7 +490,7 @@ fn create_input_layout(device: &ID3D11Device, vs_blob: &[u8]) -> Result<ID3D11In
             SemanticIndex: 0,
             Format: DXGI_FORMAT_R32G32B32A32_FLOAT,
             InputSlot: 0,
-            AlignedByteOffset: 8,
+            AlignedByteOffset: std::mem::offset_of!(Vertex, color) as u32,
             InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
             InstanceDataStepRate: 0,
         },
@@ -499,7 +499,7 @@ fn create_input_layout(device: &ID3D11Device, vs_blob: &[u8]) -> Result<ID3D11In
             SemanticIndex: 0,
             Format: DXGI_FORMAT_R32G32_FLOAT,
             InputSlot: 0,
-            AlignedByteOffset: 24,
+            AlignedByteOffset: std::mem::offset_of!(Vertex, uv) as u32,
             InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
             InstanceDataStepRate: 0,
         },
@@ -508,7 +508,7 @@ fn create_input_layout(device: &ID3D11Device, vs_blob: &[u8]) -> Result<ID3D11In
             SemanticIndex: 1,
             Format: DXGI_FORMAT_R32G32_FLOAT,
             InputSlot: 0,
-            AlignedByteOffset: 32,
+            AlignedByteOffset: std::mem::offset_of!(Vertex, params) as u32,
             InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
             InstanceDataStepRate: 0,
         },
@@ -654,4 +654,25 @@ fn create_index_buffer(device: &ID3D11Device, indices: &[u32]) -> Result<ID3D11B
         buf.unwrap()
     };
     Ok(buf)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn compile(source: &[u8], target: &str, name: &str) {
+        if let Err(error) = compile_shader(source, "main", target, name) {
+            panic!("{name} failed to compile: {error}");
+        }
+    }
+
+    // D3DCompile needs no device, so this runs anywhere the compiler DLL is present and
+    // catches HLSL errors that would otherwise only surface when an overlay is created
+    #[test]
+    fn shaders_compile() {
+        compile(VS_SOURCE, "vs_5_0", "vertex");
+        compile(PS_SOLID_SOURCE, "ps_5_0", "ps_solid");
+        compile(PS_GLYPH_SOURCE, "ps_5_0", "ps_glyph");
+        compile(&ps_glyph_outline_source(), "ps_5_0", "ps_glyph_outline");
+    }
 }
