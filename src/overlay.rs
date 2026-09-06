@@ -159,21 +159,50 @@ impl Overlay {
 
     /// Draw a line with the given thickness.
     pub fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, color: Color) {
-        let dx = x2 - x1;
-        let dy = y2 - y1;
-        let len = (dx * dx + dy * dy).sqrt();
-        if len < f32::EPSILON {
-            return;
-        }
-        let nx = -dy / len * thickness * 0.5;
-        let ny = dx / len * thickness * 0.5;
-        let c = color.to_f32_array();
-        self.draw_list.add_solid_quad(
-            Vertex::new(x1 + nx, y1 + ny, c),
-            Vertex::new(x1 - nx, y1 - ny, c),
-            Vertex::new(x2 - nx, y2 - ny, c),
-            Vertex::new(x2 + nx, y2 + ny, c),
+        self.polyline(&[[x1, y1], [x2, y2]], false, thickness, color);
+    }
+
+    /// Draw an open or closed polyline with centered thickness and butt end caps.
+    ///
+    /// Joins share vertices and use miters limited to four times the half-thickness;
+    /// sharper joins are shortened to that limit. Exact reversals use the outgoing
+    /// segment normal. Self-intersections and reversals may overlap and blend twice.
+    /// Consecutive duplicate points are ignored, as is a repeated closing point for
+    /// closed paths. Two distinct points draw one segment even when closed.
+    /// Fewer than two points, non-finite coordinates, non-positive or non-finite
+    /// thickness, or unrepresentable output coordinates draw nothing.
+    pub fn polyline(&mut self, points: &[[f32; 2]], closed: bool, thickness: f32, color: Color) {
+        crate::geometry::polyline(
+            &mut self.draw_list,
+            points,
+            closed,
+            thickness,
+            color.to_f32_array(),
         );
+    }
+
+    /// Fill a convex polygon whose boundary vertices are in either winding order.
+    ///
+    /// Consecutive duplicates and a repeated closing point are ignored. Collinear
+    /// boundary vertices are allowed. Fewer than three distinct non-collinear points,
+    /// non-finite coordinates, concave or self-intersecting boundaries draw nothing.
+    /// Convexity validation takes O(n²) time; triangulation takes O(n) space.
+    pub fn convex_polygon_filled(&mut self, points: &[[f32; 2]], color: Color) {
+        crate::geometry::convex_polygon_filled(&mut self.draw_list, points, color.to_f32_array());
+    }
+
+    /// Intersect a clipping rectangle with the current clip and push it on the stack.
+    ///
+    /// Applies to all subsequent shapes, glyph fills, and glyph outlines, not to
+    /// already queued drawing. Intersections are computed before pixel rounding.
+    /// Invalid rectangles clip everything. Every new frame starts without a clip.
+    pub fn push_clip_rect(&mut self, rect: crate::ClipRect) {
+        self.draw_list.push_clip_rect(rect);
+    }
+
+    /// Restore the previous clipping rectangle. An empty stack is a no-op.
+    pub fn pop_clip_rect(&mut self) {
+        self.draw_list.pop_clip_rect();
     }
 
     /// Draw a circle outline.

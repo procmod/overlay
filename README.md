@@ -20,7 +20,7 @@ Create a transparent, click-through overlay window on top of any game window and
 
 ```toml
 [dependencies]
-procmod-overlay = "3.0.0"
+procmod-overlay = "3.0.1"
 ```
 
 ## Quick start
@@ -137,6 +137,31 @@ overlay.circle(150.0, 150.0, 20.0, Color::CYAN);
 
 overlay.end_frame()?;
 ```
+
+### Paths and clipping
+
+Draw a projected route and a highlighted region inside a minimap panel:
+
+```rust
+use procmod_overlay::ClipRect;
+
+overlay.push_clip_rect(ClipRect::new(20.0, 20.0, 220.0, 180.0));
+overlay.convex_polygon_filled(
+    &[[40.0, 50.0], [160.0, 40.0], [180.0, 120.0], [60.0, 140.0]],
+    Color::rgba(56, 189, 248, 80),
+);
+overlay.polyline(
+    &[[30.0, 150.0], [90.0, 100.0], [150.0, 110.0], [240.0, 60.0]],
+    false,
+    2.0,
+    Color::WHITE,
+);
+overlay.pop_clip_rect();
+```
+
+`polyline` accepts an open or closed path, uses centered thickness with flat end caps, and limits sharp joins to twice the thickness. Self-intersections can blend more than once. `convex_polygon_filled` accepts either winding order; invalid or non-convex boundaries draw nothing.
+
+Clips intersect when nested and apply to subsequent shapes and text, including outlines. Bounds are left, top, right, bottom in overlay pixel coordinates, rounded outward to whole pixels after intersection. Invalid or empty rectangles hide drawing. `pop_clip_rect` restores the previous clip; `begin_frame` clears the stack.
 
 ### Drawing text
 

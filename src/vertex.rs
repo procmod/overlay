@@ -1,3 +1,5 @@
+use crate::clip::ClipRect;
+
 /// A vertex for the overlay's 2D rendering pipeline.
 ///
 /// Position is in pixel coordinates (top-left origin). Color is normalized RGBA.
@@ -44,6 +46,7 @@ pub(crate) enum CommandKind {
 #[derive(Debug, Clone)]
 pub(crate) struct DrawCommand {
     pub kind: CommandKind,
+    pub clip: Option<ClipRect>,
     pub index_offset: u32,
     pub index_count: u32,
 }
@@ -53,6 +56,7 @@ pub(crate) struct DrawList {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub commands: Vec<DrawCommand>,
+    clips: Vec<ClipRect>,
 }
 
 impl DrawList {
@@ -61,6 +65,7 @@ impl DrawList {
             vertices: Vec::new(),
             indices: Vec::new(),
             commands: Vec::new(),
+            clips: Vec::new(),
         }
     }
 
@@ -68,6 +73,20 @@ impl DrawList {
         self.vertices.clear();
         self.indices.clear();
         self.commands.clear();
+        self.clips.clear();
+    }
+
+    pub fn push_clip_rect(&mut self, rect: ClipRect) {
+        let rect = rect.canonical();
+        self.clips.push(
+            self.clips
+                .last()
+                .map_or(rect, |parent| parent.intersect(rect)),
+        );
+    }
+
+    pub fn pop_clip_rect(&mut self) {
+        self.clips.pop();
     }
 
     pub fn add_solid_quad(&mut self, v0: Vertex, v1: Vertex, v2: Vertex, v3: Vertex) {
@@ -94,6 +113,9 @@ impl DrawList {
     }
 
     pub fn add_solid_triangles(&mut self, verts: &[Vertex], idxs: &[u32]) {
+        if idxs.is_empty() {
+            return;
+        }
         let base = self.vertices.len() as u32;
         self.vertices.extend_from_slice(verts);
         self.indices.extend(idxs.iter().map(|i| i + base));
@@ -110,15 +132,20 @@ impl DrawList {
 
     /// Append a run of indices, extending the previous command when it needs the same state.
     fn push_command(&mut self, kind: CommandKind, index_count: u32) {
+        let clip = self.clips.last().copied();
         let index_offset = self.indices.len() as u32 - index_count;
         if let Some(last) = self.commands.last_mut() {
-            if last.kind == kind && last.index_offset + last.index_count == index_offset {
+            if last.kind == kind
+                && last.clip == clip
+                && last.index_offset + last.index_count == index_offset
+            {
                 last.index_count += index_count;
                 return;
             }
         }
         self.commands.push(DrawCommand {
             kind,
+            clip,
             index_offset,
             index_count,
         });
@@ -147,6 +174,52 @@ mod tests {
             Vertex::with_uv(1.0, 1.0, C, 1.0, 1.0),
             Vertex::with_uv(0.0, 1.0, C, 0.0, 1.0),
         );
+    }
+
+    #[test]
+    fn clip_stack_is_snapshotted_intersected_and_reset() {
+        let mut dl = DrawList::new();
+        let outer = ClipRect::new(1.0, 2.0, 20.0, 30.0);
+        quad(&mut dl);
+        dl.push_clip_rect(outer);
+        quad(&mut dl);
+        quad(&mut dl);
+        dl.push_clip_rect(ClipRect::new(10.0, 0.0, 40.0, 12.0));
+        glyph_quad(&mut dl);
+        let v = Vertex::new(0.0, 0.0, C);
+        dl.add_glyph_outline_quad(v, v, v, v, [1.0, 1.0]);
+        dl.pop_clip_rect();
+        quad(&mut dl);
+        dl.pop_clip_rect();
+        dl.pop_clip_rect();
+        quad(&mut dl);
+        assert_eq!(dl.commands.len(), 6);
+        assert_eq!(dl.commands[0].clip, None);
+        assert_eq!(dl.commands[1].clip, Some(outer));
+        assert_eq!(dl.commands[1].index_count, 12);
+        assert_eq!(
+            dl.commands[2].clip,
+            Some(ClipRect::new(10.0, 2.0, 20.0, 12.0))
+        );
+        assert_eq!(dl.commands[3].clip, dl.commands[2].clip);
+        assert_eq!(dl.commands[4].clip, Some(outer));
+        assert_eq!(dl.commands[5].clip, None);
+        dl.push_clip_rect(outer);
+        dl.clear();
+        quad(&mut dl);
+        assert_eq!(dl.commands[0].clip, None);
+    }
+
+    #[test]
+    fn empty_nested_clip_cannot_be_reopened_until_popped() {
+        let mut dl = DrawList::new();
+        dl.push_clip_rect(ClipRect::new(f32::NAN, 0.0, 1.0, 1.0));
+        dl.push_clip_rect(ClipRect::new(-10.0, -10.0, 10.0, 10.0));
+        quad(&mut dl);
+        assert_eq!(crate::clip::scissor(dl.commands[0].clip, 100, 100), [0; 4]);
+        dl.pop_clip_rect();
+        quad(&mut dl);
+        assert_eq!(dl.commands.len(), 1);
     }
 
     #[test]

@@ -2,7 +2,7 @@ use crate::error::{Error, Result};
 use crate::font::{GlyphAtlas, OUTLINE_PAD};
 use crate::vertex::{CommandKind, DrawCommand, Vertex};
 use windows::core::{HRESULT, PCSTR};
-use windows::Win32::Foundation::{HMODULE, HWND};
+use windows::Win32::Foundation::{HMODULE, HWND, RECT};
 use windows::Win32::Graphics::Direct3D::Fxc::{D3DCompile, D3DCOMPILE_OPTIMIZATION_LEVEL3};
 use windows::Win32::Graphics::Direct3D::*;
 use windows::Win32::Graphics::Direct3D11::*;
@@ -400,7 +400,18 @@ impl Gpu {
         }
 
         for cmd in commands {
+            let [left, top, right, bottom] =
+                crate::clip::scissor(cmd.clip, self.width, self.height);
+            if left >= right || top >= bottom {
+                continue;
+            }
             unsafe {
+                self.context.RSSetScissorRects(Some(&[RECT {
+                    left,
+                    top,
+                    right,
+                    bottom,
+                }]));
                 match cmd.kind {
                     CommandKind::Solid => self.context.PSSetShader(&self.ps_solid, None),
                     CommandKind::Glyph => {
@@ -709,7 +720,7 @@ fn create_rasterizer_state(device: &ID3D11Device) -> Result<ID3D11RasterizerStat
     let desc = D3D11_RASTERIZER_DESC {
         FillMode: D3D11_FILL_SOLID,
         CullMode: D3D11_CULL_NONE,
-        ScissorEnable: false.into(),
+        ScissorEnable: true.into(),
         DepthClipEnable: true.into(),
         ..Default::default()
     };
@@ -789,6 +800,50 @@ mod tests {
         assert!(signals_device_loss(DXGI_ERROR_DEVICE_RESET));
         assert!(!signals_device_loss(DXGI_ERROR_INVALID_CALL));
         assert!(!signals_device_loss(HRESULT(0)));
+    }
+
+    #[test]
+    fn warp_rasterizer_enables_scissoring_and_accepts_clip_transitions() {
+        unsafe {
+            let mut device = None;
+            let mut context = None;
+            D3D11CreateDevice(
+                None,
+                D3D_DRIVER_TYPE_WARP,
+                HMODULE::default(),
+                D3D11_CREATE_DEVICE_FLAG(0),
+                None,
+                D3D11_SDK_VERSION,
+                Some(&mut device),
+                None,
+                Some(&mut context),
+            )
+            .unwrap();
+            let state = create_rasterizer_state(&device.unwrap()).unwrap();
+            let mut desc = D3D11_RASTERIZER_DESC::default();
+            state.GetDesc(&mut desc);
+            assert!(desc.ScissorEnable.as_bool());
+            assert_eq!(desc.CullMode, D3D11_CULL_NONE);
+            let context = context.unwrap();
+            context.RSSetState(&state);
+            for clip in [Some(crate::ClipRect::new(2.5, 3.5, 8.5, 9.5)), None] {
+                let [left, top, right, bottom] = crate::clip::scissor(clip, 20, 30);
+                context.RSSetScissorRects(Some(&[RECT {
+                    left,
+                    top,
+                    right,
+                    bottom,
+                }]));
+                let mut count = 1;
+                let mut actual = RECT::default();
+                context.RSGetScissorRects(&mut count, Some(&mut actual));
+                assert_eq!(count, 1);
+                assert_eq!(
+                    [actual.left, actual.top, actual.right, actual.bottom],
+                    [left, top, right, bottom]
+                );
+            }
+        }
     }
 
     #[test]
